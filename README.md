@@ -1,3 +1,6 @@
+> **Cititec fork** of [WYRE-AI/datto-rmm-mcp](https://github.com/WYRE-AI/datto-rmm-mcp). Before changing anything, read
+> [CITITEC-FORK.md](CITITEC-FORK.md): which changes go back to Wyre and which stay in this fork.
+
 # Datto RMM MCP Server
 
 MCP server for Datto RMM, enabling Claude to interact with your Datto RMM account.
