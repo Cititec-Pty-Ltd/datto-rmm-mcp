@@ -41,6 +41,8 @@ import { siteHardware, DEFAULT_MAX_DEVICES, MAX_DEVICES_LIMIT, SITE_DEVICE_LIST_
 import { hiddenUdfKeys, redactUdfs } from "./udf-redact.js";
 import {
   applyUntrustedContentMarkers,
+  markersEnabled,
+  wrapUntrustedContent,
   type ToolResultLike,
 } from "./untrusted-content.js";
 
@@ -1338,10 +1340,21 @@ export function createMcpServer(
             // A rate limit is an error, so callers (and the host's shared limiter) back off before
             // continuing; the rows read so far are kept after the message.
             return {
-              content: [{ type: "text", text: `Error: ${result.rateLimited.message}
+              // Error results are not wrapped by applyUntrustedContentMarkers, so the partial rows
+              // (device-reported hostnames and audit fields) are wrapped here.
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Error: ${result.rateLimited.message}
 
 Partial result:
-${JSON.stringify(result, null, 2)}` }],
+` +
+                    (markersEnabled()
+                      ? wrapUntrustedContent("datto_site_hardware", JSON.stringify(result, null, 2))
+                      : JSON.stringify(result, null, 2)),
+                },
+              ],
               isError: true,
               ...(result.rateLimited.retryAfterSeconds !== undefined
                 ? { structuredContent: { error_type: "rate_limited", retry_after_seconds: result.rateLimited.retryAfterSeconds } }
