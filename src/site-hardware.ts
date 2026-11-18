@@ -8,8 +8,9 @@
  * Datto's API rate limit (600 reads a minute per account, shared by everything using the
  * account) and inside a caller's time limit:
  *
- * - one audit at a time, `gapMs` apart (default 500 ms, about 120 a minute);
- * - it stops after `budgetMs` (default 40 s) and returns what it has with `nextOffset`,
+ * - one audit at a time, `gapMs` apart (default 300 ms, about 200 a minute);
+ * - it stops after `budgetMs` (default 20 s: Claude gives a connector call well under a minute,
+ *   less while a server starts) and returns what it has with `nextOffset`,
  *   so the caller can continue from there;
  * - a rate-limit error stops it at once (never retried: Datto blocks the source IP when
  *   requests continue after a 429) and is reported with how long to wait;
@@ -22,8 +23,8 @@ import { rateLimitDetails, isRateLimitError } from "./rate-limit.js";
 
 export const DEFAULT_MAX_DEVICES = 50;
 export const MAX_DEVICES_LIMIT = 100;
-export const DEFAULT_GAP_MS = 500;
-export const DEFAULT_BUDGET_MS = 40_000;
+export const DEFAULT_GAP_MS = 300;
+export const DEFAULT_BUDGET_MS = 20_000;
 /** Upper bound on the site's device list we read and sort. */
 export const SITE_DEVICE_LIST_LIMIT = 5000;
 
