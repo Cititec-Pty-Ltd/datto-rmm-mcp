@@ -1328,11 +1328,26 @@ export function createMcpServer(
           const result = await siteHardware(
             siteUid,
             {
-              listDevices: () => collectItems(client.sites.devicesAll(siteUid), SITE_DEVICE_LIST_LIMIT),
+              // One more than the limit, so a site larger than the limit is reported as truncated.
+              listDevices: () => collectItems(client.sites.devicesAll(siteUid), SITE_DEVICE_LIST_LIMIT + 1),
               audit: (deviceUid) => client.audit.device(deviceUid),
             },
             { offset, max }
           );
+          if (result.rateLimited) {
+            // A rate limit is an error, so callers (and the host's shared limiter) back off before
+            // continuing; the rows read so far are kept after the message.
+            return {
+              content: [{ type: "text", text: `Error: ${result.rateLimited.message}
+
+Partial result:
+${JSON.stringify(result, null, 2)}` }],
+              isError: true,
+              ...(result.rateLimited.retryAfterSeconds !== undefined
+                ? { structuredContent: { error_type: "rate_limited", retry_after_seconds: result.rateLimited.retryAfterSeconds } }
+                : {}),
+            };
+          }
           return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         }
 

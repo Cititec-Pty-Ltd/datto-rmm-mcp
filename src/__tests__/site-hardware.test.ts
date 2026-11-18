@@ -92,6 +92,24 @@ describe("siteHardware", () => {
     expect(r.returned).toBe(1);
     expect(r.nextOffset).toBe(1);
     expect(r.notes?.join(" ")).toMatch(/HTTP 429.*Try again in 30 s/);
+    // Machine-readable, so the tool can return a rate-limit error with the partial rows.
+    expect(r.rateLimited?.retryAfterSeconds).toBe(30);
+    expect(r.rateLimited?.message).toMatch(/429/);
+  });
+
+  it("says so when the site has more devices than the list limit", async () => {
+    const c = clock();
+    const r = await siteHardware(
+      "s",
+      { listDevices: async () => devices(5), audit: async (u) => audit(u), ...c },
+      { listLimit: 3 }
+    );
+    expect(r.totalDevices).toBe(3);
+    expect(r.listTruncated).toBe(true);
+    expect(r.notes?.join(" ")).toMatch(/more than 3 devices.*incomplete/);
+    const full = await siteHardware("s", { listDevices: async () => devices(3), audit: async (u) => audit(u), ...c }, { listLimit: 3 });
+    expect(full.listTruncated).toBeUndefined();
+    expect(full.rateLimited).toBeUndefined();
   });
 
   it("reports other errors per device and carries on; notes devices with no manufacturer", async () => {

@@ -45,6 +45,10 @@ export interface SiteHardwareResult {
   returned: number;
   devices: HardwareRow[];
   nextOffset?: number;
+  /** The site has more devices than SITE_DEVICE_LIST_LIMIT; only that many are covered. */
+  listTruncated?: boolean;
+  /** Set when Datto rate-limited the audits: the caller must wait before continuing. */
+  rateLimited?: { message: string; retryAfterSeconds?: number };
   notes?: string[];
 }
 
@@ -62,6 +66,8 @@ export interface SiteHardwareOptions {
   max?: number;
   gapMs?: number;
   budgetMs?: number;
+  /** How many listed devices to cover at most (default SITE_DEVICE_LIST_LIMIT). */
+  listLimit?: number;
 }
 
 function field(obj: unknown, key: string): unknown {
@@ -91,7 +97,10 @@ export async function siteHardware(
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
   const started = now();
 
-  const listed = await deps.listDevices();
+  const listLimit = opts.listLimit ?? SITE_DEVICE_LIST_LIMIT;
+  const listedRaw = await deps.listDevices();
+  const listTruncated = listedRaw.length > listLimit;
+  const listed = listTruncated ? listedRaw.slice(0, listLimit) : listedRaw;
   const all = listed
     .map((d) => ({
       uid: str(field(d, "uid")),
@@ -106,6 +115,7 @@ export async function siteHardware(
   const rows: HardwareRow[] = [];
   const notes: string[] = [];
   let stoppedAt: number | undefined;
+  let rateLimited: SiteHardwareResult["rateLimited"];
 
   for (let i = 0; i < slice.length; i++) {
     const d = slice[i];
@@ -130,7 +140,8 @@ export async function siteHardware(
     } catch (error) {
       if (isRateLimitError(error)) {
         // Never retried: continuing after a 429 gets the source IP blocked.
-        const { retryAfterSeconds } = rateLimitDetails(error);
+        const { message, retryAfterSeconds } = rateLimitDetails(error);
+        rateLimited = { message, retryAfterSeconds };
         stoppedAt = offset + i;
         notes.push(
           `Stopped: Datto RMM rate-limited the requests (HTTP 429). Try again in ${retryAfterSeconds ?? 60} s, ` +
@@ -155,6 +166,11 @@ export async function siteHardware(
   if (nextOffset !== undefined && stoppedAt === undefined) {
     notes.push(`${all.length - nextOffset} more devices; continue with offset ${nextOffset}.`);
   }
+  if (listTruncated) {
+    notes.push(
+      `This site has more than ${listLimit} devices; only the first ${listLimit} (in Datto's order) are covered, so the results are incomplete.`
+    );
+  }
   const missing = rows.filter((r) => !r.error && r.manufacturer === null).length;
   if (missing > 0) {
     notes.push(`${missing} device(s) report no manufacturer in their audit (often an audit that has not run yet).`);
@@ -167,6 +183,8 @@ export async function siteHardware(
     returned: rows.length,
     devices: rows,
     ...(nextOffset !== undefined ? { nextOffset } : {}),
+    ...(listTruncated ? { listTruncated } : {}),
+    ...(rateLimited ? { rateLimited } : {}),
     ...(notes.length ? { notes } : {}),
   };
 }
