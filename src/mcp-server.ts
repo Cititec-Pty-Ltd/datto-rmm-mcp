@@ -37,8 +37,12 @@ import { ALERT_CARD_HTML } from "./generated/alert-card-html.js";
 import { getDevicePatches, getSitePatches } from "./patches.js";
 import { listDeviceJobs } from "./device-jobs.js";
 import { rateLimitDetails } from "./rate-limit.js";
+import { siteHardware, DEFAULT_MAX_DEVICES, MAX_DEVICES_LIMIT, SITE_DEVICE_LIST_LIMIT } from "./site-hardware.js";
+import { hiddenUdfKeys, redactUdfs } from "./udf-redact.js";
 import {
   applyUntrustedContentMarkers,
+  markersEnabled,
+  wrapUntrustedContent,
   type ToolResultLike,
 } from "./untrusted-content.js";
 
@@ -817,6 +821,29 @@ export function createMcpServer(
           },
         },
         {
+          name: "datto_site_hardware",
+          description:
+            "Manufacturer, model and serial number of the devices in one site (with hostname, device type and online state). " +
+            "The device list and device details do not include manufacturer or model; this reads each device's audit, " +
+            `paced to stay inside Datto's rate limit, up to ${MAX_DEVICES_LIMIT} devices per call (default ${DEFAULT_MAX_DEVICES}). ` +
+            "Use it to find devices by manufacturer or model, or with none recorded. When the result has nextOffset, " +
+            "call again with that offset to continue. Devices are sorted by hostname.",
+          annotations: { readOnlyHint: true },
+          inputSchema: {
+            type: "object",
+            properties: {
+              siteUid: { type: "string", description: "The site UID (from datto_list_sites)" },
+              offset: { type: "number", description: "Start at this position in the hostname-sorted list (default 0)", default: 0 },
+              max: {
+                type: "number",
+                description: `Most devices to read in this call (default ${DEFAULT_MAX_DEVICES}, max ${MAX_DEVICES_LIMIT})`,
+                default: DEFAULT_MAX_DEVICES,
+              },
+            },
+            required: ["siteUid"],
+          },
+        },
+        {
           name: "datto_get_site_patches",
           description:
             "Get Windows patch installation status across all devices in a site",
@@ -931,7 +958,7 @@ export function createMcpServer(
 
           return {
             content: [
-              { type: "text", text: JSON.stringify(devices ?? [], null, 2) },
+              { type: "text", text: JSON.stringify(redactUdfs(devices ?? [], hiddenUdfKeys()), null, 2) },
             ],
           };
         }
@@ -999,9 +1026,10 @@ export function createMcpServer(
         case "datto_get_device": {
           const { deviceUid } = args as { deviceUid: string };
           const device = await client.devices.get(deviceUid);
+          // UDFs named in DATTO_HIDDEN_UDFS (licence keys, passwords, ...) are hidden.
           return {
             content: [
-              { type: "text", text: JSON.stringify(device ?? {}, null, 2) },
+              { type: "text", text: JSON.stringify(redactUdfs(device ?? {}, hiddenUdfKeys()), null, 2) },
             ],
           };
         }
@@ -1292,6 +1320,48 @@ export function createMcpServer(
               { type: "text", text: JSON.stringify(result ?? {}, null, 2) },
             ],
           };
+        }
+
+        case "datto_site_hardware": {
+          const { siteUid, offset, max } = args as { siteUid: string; offset?: number; max?: number };
+          if (!siteUid?.trim()) {
+            return { content: [{ type: "text", text: "Error: siteUid must not be empty" }], isError: true };
+          }
+          const result = await siteHardware(
+            siteUid,
+            {
+              // One more than the limit, so a site larger than the limit is reported as truncated.
+              listDevices: () => collectItems(client.sites.devicesAll(siteUid), SITE_DEVICE_LIST_LIMIT + 1),
+              audit: (deviceUid) => client.audit.device(deviceUid),
+            },
+            { offset, max }
+          );
+          if (result.rateLimited) {
+            // A rate limit is an error, so callers (and the host's shared limiter) back off before
+            // continuing; the rows read so far are kept after the message.
+            return {
+              // Error results are not wrapped by applyUntrustedContentMarkers, so the partial rows
+              // (device-reported hostnames and audit fields) are wrapped here.
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Error: ${result.rateLimited.message}
+
+Partial result:
+` +
+                    (markersEnabled()
+                      ? wrapUntrustedContent("datto_site_hardware", JSON.stringify(result, null, 2))
+                      : JSON.stringify(result, null, 2)),
+                },
+              ],
+              isError: true,
+              ...(result.rateLimited.retryAfterSeconds !== undefined
+                ? { structuredContent: { error_type: "rate_limited", retry_after_seconds: result.rateLimited.retryAfterSeconds } }
+                : {}),
+            };
+          }
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         }
 
         case "datto_get_site_patches": {
