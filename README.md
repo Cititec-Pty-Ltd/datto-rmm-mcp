@@ -101,7 +101,7 @@ Copy [`.env.example`](.env.example). Stdio and `AUTH_MODE=env` read vendor crede
 | `DATTO_API_KEY` | For stdio and `AUTH_MODE=env` | Datto RMM API key |
 | `DATTO_API_SECRET` | For stdio and `AUTH_MODE=env` | Datto RMM API secret |
 | `DATTO_PLATFORM` | No | API platform: `pinotage`, `merlot`, `concord` (default), `vidal`, `zinfandel`, or `syrah` |
-| `DATTO_HIDDEN_UDFS` | No | User-defined fields to hide in `datto_get_device` and `datto_list_devices` results, comma separated (example: `3,4,28`). Each listed UDF that has a value shows as `[hidden]`, so licence keys or passwords kept in UDFs are not handed to callers |
+| `DATTO_HIDDEN_UDFS` | No | User-defined fields to hide in `datto_get_device` and `datto_list_devices` results, comma separated (example: `3,4,28`). Each listed UDF that has a value shows as `[hidden]`, so licence keys or passwords kept in UDFs are not handed to callers. `datto_set_device_udf` refuses to write a listed UDF, and refuses all UDF writes while this is unset (set `none` if no UDF holds a secret) |
 | `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
 | `AUTH_MODE` | No | `env` (image default) or `gateway` (Compose default). Gateway mode requires `X-Datto-API-Key` and `X-Datto-API-Secret` on each `/mcp` request and never falls back to `DATTO_*`. `env` uses those variables only after S2S auth succeeds. |
 | `CONDUIT_S2S_SECRET` | Yes for HTTP | Service-to-service secret. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder (`changeme`, `placeholder`, `your-s2s-secret`, `replace-with-a-real-secret`, and the other example values in code). Compose will not start without it. Never commit a real value. Generate one with `openssl rand -hex 32`. |
@@ -140,6 +140,8 @@ Microsoft 365 Copilot / Copilot Studio) can use it to skip the per-call
 confirmation prompt for those tools. Tools that create, update, resolve, or
 run anything are never annotated as read-only.
 
+Write tools are sent to Datto exactly once: a 429, an IP block, a 5xx or a 401 is never retried. A rate limit returns `structuredContent: { error_type: "rate_limited", retry_after_seconds }`.
+
 | Tool | Description | Read-only |
 |------|-------------|-----------|
 | `datto_list_devices` | List devices with optional site filter | Yes |
@@ -147,11 +149,13 @@ run anything are never annotated as read-only.
 | `datto_get_device` | Get device details by UID | Yes |
 | `datto_list_alerts` | List open alerts with optional site filter | Yes |
 | `datto_get_alert` | Get alert details by UID (renders as an interactive card in MCP Apps hosts) | Yes |
-| `datto_resolve_alert` | Resolve an alert | No |
+| `datto_resolve_alert` | Resolve an alert (write, sent once) | No |
 | `datto_list_sites` | List all sites | Yes |
 | `datto_get_site` | Get site details | Yes |
 | `datto_list_components` | List components (find a componentUid and its expected `variables` for datto_run_quickjob), optionally by name substring | Yes |
-| `datto_run_quickjob` | Run a quick job on a device (returns a job UID for use with the job tools below) | No |
+| `datto_run_quickjob` | Run an existing component on a device as a quick job (write). Only components in the account catalogue, only the variables they declare; optional `siteUid` must match the device. Returns a job UID for the job tools below | No |
+| `datto_set_device_udf` | Set or clear device UDFs (write). UDFs in `DATTO_HIDDEN_UDFS` are refused and values are never echoed; refuses all UDF writes when `DATTO_HIDDEN_UDFS` is unset (use `none`) | No |
+| `datto_move_device` | Move a device to another site (write). Checks the device and site first | No |
 | `datto_get_job` | Get status/details for a quick job by UID | Yes |
 | `datto_get_job_components` | Get the components that make up a quick job | Yes |
 | `datto_get_job_results` | Get a quick job's result for a specific device | Yes |
