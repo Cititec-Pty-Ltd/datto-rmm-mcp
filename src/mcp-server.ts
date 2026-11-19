@@ -723,7 +723,7 @@ export function createMcpServer(
               },
               udfs: {
                 type: "object",
-                description: "UDF values by key, udf1 to udf100 (at most 255 characters each)",
+                description: "UDF values by key, udf1 to udf300 (at most 255 characters each)",
                 additionalProperties: { type: "string" },
               },
             },

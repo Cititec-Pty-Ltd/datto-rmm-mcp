@@ -136,7 +136,7 @@ const CONTROL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 export const MAX_JOB_NAME_LENGTH = 100;
 export const MAX_VARIABLE_VALUE_LENGTH = 1024;
 export const MAX_UDF_VALUE_LENGTH = 255;
-export const MAX_UDF_NUMBER = 100;
+export const MAX_UDF_NUMBER = 300;
 
 /** Throws unless `args` is an object with only the listed keys. */
 export function onlyKeys(args: unknown, allowed: string[]): Record<string, unknown> {
