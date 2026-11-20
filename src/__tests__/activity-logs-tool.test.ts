@@ -146,8 +146,8 @@ describe("datto_list_activity_logs", () => {
       from: "2026-11-01",
       until: "2026-11-02T12:00:00",
       entity: "User",
-      category: "user, job",
-      action: "login",
+      category: "user, Remote Control",
+      action: "login,Patch Start",
       siteId: 7,
       userId: 101,
       hostname: "WS-01",
@@ -159,8 +159,8 @@ describe("datto_list_activity_logs", () => {
     expect(q.get("from")).toBe("2026-11-01T00:00:00Z");
     expect(q.get("until")).toBe("2026-11-02T12:00:00Z");
     expect(q.get("entities")).toBe("user");
-    expect(q.get("categories")).toBe("user,job");
-    expect(q.get("actions")).toBe("login");
+    expect(q.get("categories")).toBe("user,Remote Control");
+    expect(q.get("actions")).toBe("login,Patch Start");
     expect(q.get("siteIds")).toBe("7");
     expect(q.get("userIds")).toBe("101");
     expect(q.get("order")).toBe("asc");
@@ -248,6 +248,7 @@ describe("datto_list_activity_logs", () => {
       [{ from: "last tuesday" }, /from must be an ISO 8601/],
       [{ from: "2026-11-09", until: "2026-11-01" }, /from must be earlier than until/],
       [{ category: "job;drop" }, /category must be/],
+      [{ action: "Patch  Start" }, /action must be/],
       [{ siteId: -1 }, /siteId must be a positive whole number/],
       [{ hostname: 'WS" OR *' }, /hostname must be/],
       [{ cursor: "not-a-cursor" }, /cursor is not a nextCursor/],

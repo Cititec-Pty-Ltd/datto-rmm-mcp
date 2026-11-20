@@ -61,7 +61,9 @@ const DETAIL_MAX_KEYS = 25;
 const DETAIL_STRING_CHARS = 500;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LIST_VALUE_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+/** A category/action name: words of [A-Za-z0-9_.-] separated by single spaces
+ *  (Datto has e.g. "Remote Control" and "Patch Start"), at most 64 chars. */
+const LIST_VALUE_RE = /^(?=.{1,64}$)[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*$/;
 const HOSTNAME_RE = /^[A-Za-z0-9._-]{1,253}$/;
 const MAX_LIST_VALUES = 20;
 const MAX_SEARCH_CHARS = 500;
@@ -171,7 +173,7 @@ function listParam(value: string | undefined, field: string): string | undefined
     .filter((v) => v.length > 0);
   if (items.length === 0) return undefined;
   if (items.length > MAX_LIST_VALUES || !items.every((v) => LIST_VALUE_RE.test(v))) {
-    throw new Error(`${field} must be up to ${MAX_LIST_VALUES} comma-separated names (letters, digits, _ . -)`);
+    throw new Error(`${field} must be up to ${MAX_LIST_VALUES} comma-separated names (letters, digits, spaces, _ . -)`);
   }
   return items.join(",");
 }
